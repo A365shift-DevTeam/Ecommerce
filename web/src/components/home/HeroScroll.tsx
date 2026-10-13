@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useReducedMotion } from "motion/react";
-import { HERO_FRAME_COUNT, HERO_WIDTHS, heroFrame } from "../../lib/cloudinary";
+import { HERO_FRAME_COUNT, HERO_WIDTHS, heroFrame, heroIntro } from "../../lib/cloudinary";
 import { useIsMobile } from "../../hooks/useIsMobile";
 
 /*
@@ -23,9 +23,14 @@ import { useIsMobile } from "../../hooks/useIsMobile";
   full-size canvas, which blocked the main thread for about 7 s while the 120 frames loaded.
   Smoothness: Lenis smooths the scroll; a scroll tick is one drawImage of an already decoded bitmap.
   Each scroll position shows exactly one frame: no blending between frames (that read as motion blur).
+  Intro: the Gruham brand card is the opening frame. It fades into frame 1 over the first INTRO_FADE
+  of the scroll, then the frames play. On desktop it sits below the see-through nav row, so the nav
+  never covers its "GRUHAM" title; the strip behind the nav is filled with the card's velvet colour.
 */
 
 const FRAME_STEP = 1; // all 120 frames, so each step between frames is small
+const INTRO_FADE = 0.06; // share of the pinned scroll spent fading the brand card into frame 1
+const INTRO_BG = "#411211"; // velvet along the card's top edge
 // Per-frame width caps: keeps 120 decoded frames within phone and laptop memory.
 const backingCap = (mobile: boolean) => (mobile ? 720 : 1440);
 
@@ -74,8 +79,19 @@ async function loadFrame(url: string): Promise<Frame | null> {
   return im;
 }
 
-/** cover: desktop fills the box edge to edge (centre crop); otherwise the frame is drawn whole. */
-type Rect = { cw: number; ch: number; x: number; y: number; w: number; h: number; cover: boolean };
+/** Source rectangle that centre-crops an fw×fh image to the w:h shape. */
+function cropTo(fw: number, fh: number, w: number, h: number) {
+  const k = Math.max(w / fw, h / fh);
+  const sw = w / k;
+  const sh = h / k;
+  return [(fw - sw) / 2, (fh - sh) / 2, sw, sh] as const;
+}
+
+/**
+ * cover: desktop fills the box edge to edge (centre crop); otherwise the frame is drawn whole.
+ * introTop: canvas rows hidden behind the see-through nav row, which the brand card stays below.
+ */
+type Rect = { cw: number; ch: number; x: number; y: number; w: number; h: number; cover: boolean; introTop: number };
 
 export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
   const reduced = useReducedMotion();
@@ -86,10 +102,13 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const urlsRef = useRef<string[]>([]);
   const cacheRef = useRef<(Frame | null)[]>([]);
+  const introRef = useRef<Frame | null>(null);
+  const navRowRef = useRef<HTMLDivElement>(null);
   const rectRef = useRef<Rect | null>(null);
   const geomRef = useRef({ start: 0, travel: 1 });
-  const posRef = useRef({ current: 0, drawn: -1, dirty: true, t: 0 });
+  const posRef = useRef({ current: 0, drawn: -1, alpha: -1, dirty: true, t: 0 });
   const genRef = useRef(0);
+  const introLoadRef = useRef<Promise<unknown>>(Promise.resolve());
   const [ready, setReady] = useState(false);
   const [loaded, setLoaded] = useState(0);
 
@@ -120,35 +139,49 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
     const h = cover ? ch : Math.round(9 * s);
     canvas.width = cw;
     canvas.height = ch;
-    rectRef.current = { cw, ch, w, h, cover, x: Math.round((cw - w) / 2), y: cover || mobile ? 0 : Math.round((ch - h) / 2) };
+    // Resizing clears an opaque canvas to black; paint the card's velvet until the next draw.
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (ctx) (ctx.fillStyle = INTRO_BG), ctx.fillRect(0, 0, cw, ch);
+    const introTop = cover ? Math.round((navRowRef.current?.clientHeight ?? 0) * scale) : 0;
+    rectRef.current = { cw, ch, w, h, cover, introTop, x: Math.round((cw - w) / 2), y: cover || mobile ? 0 : Math.round((ch - h) / 2) };
     posRef.current.dirty = true;
   };
 
-  const draw = (pos: number) => {
+  /** Draw frame `pos`, with the brand card on top at `introAlpha` (1 = card only, 0 = frame only). */
+  const draw = (pos: number, introAlpha: number) => {
     const canvas = canvasRef.current;
     const rect = rectRef.current;
     const cache = cacheRef.current;
-    if (!canvas || !rect || cache.length === 0) return false;
+    if (!canvas || !rect) return false;
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) return false;
-    const i = Math.round(pos);
-    let a = cache[i];
-    for (let d = 1; !a && d < cache.length; d++) a = cache[i - d] ?? cache[i + d] ?? null;
-    if (!a) return false;
-    const [fw, fh] = frameSize(a);
-    let sx = 0, sy = 0, sw = fw, sh = fh;
-    if (rect.cover) {
-      // Crop the centre of the frame to the box's aspect ratio.
-      const k = Math.max(rect.w / fw, rect.h / fh);
-      sw = rect.w / k;
-      sh = rect.h / k;
-      sx = (fw - sw) / 2;
-      sy = (fh - sh) / 2;
+    const intro = introAlpha > 0 ? introRef.current : null;
+    let a: Frame | null = null;
+    if (!intro || introAlpha < 1) {
+      const i = Math.round(pos);
+      a = cache[i] ?? null;
+      for (let d = 1; !a && d < cache.length; d++) a = cache[i - d] ?? cache[i + d] ?? null;
     }
+    if (!a && !intro) return false;
     ctx.imageSmoothingQuality = "high";
+    ctx.globalAlpha = 1;
     ctx.fillStyle = "#1c0b10";
     ctx.fillRect(0, 0, rect.cw, rect.ch);
-    ctx.drawImage(a, sx, sy, sw, sh, rect.x, rect.y, rect.w, rect.h);
+    if (a) {
+      const [fw, fh] = frameSize(a);
+      // Desktop crops the centre of the frame to the box's aspect ratio; mobile draws it whole.
+      const [sx, sy, sw, sh] = rect.cover ? cropTo(fw, fh, rect.w, rect.h) : [0, 0, fw, fh];
+      ctx.drawImage(a, sx, sy, sw, sh, rect.x, rect.y, rect.w, rect.h);
+    }
+    if (intro) {
+      const [fw, fh] = frameSize(intro);
+      const top = rect.introTop;
+      ctx.globalAlpha = a ? introAlpha : 1;
+      ctx.fillStyle = INTRO_BG;
+      ctx.fillRect(0, 0, rect.cw, top);
+      ctx.drawImage(intro, ...cropTo(fw, fh, rect.cw, rect.ch - top), 0, top, rect.cw, rect.ch - top);
+      ctx.globalAlpha = 1;
+    }
     return true;
   };
   const drawRef = useRef(draw);
@@ -174,6 +207,7 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
     setLoaded(0);
     const queue = reduced ? [n - 1] : loadOrder(n);
     Array.from({ length: 6 }, async () => {
+      await introLoadRef.current; // the brand card shows first, so no showroom frame flashes before it
       while (queue.length && gen === genRef.current) await renderFrame(queue.shift()!, gen);
     });
   };
@@ -185,6 +219,15 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
     const list: number[] = [];
     for (let n = 1; n <= HERO_FRAME_COUNT; n += FRAME_STEP) list.push(n);
     if (list[list.length - 1] !== HERO_FRAME_COUNT) list.push(HERO_FRAME_COUNT);
+    let alive = true;
+    introLoadRef.current = reduced
+      ? Promise.resolve()
+      : loadFrame(heroIntro(backingCap(mobile))).then((f) => {
+          if (!alive) return f && release([f]);
+          introRef.current = f;
+          posRef.current.dirty = true;
+          if (f) setReady(true);
+        });
     let width = 0;
     // Frames are scaled on every draw, so a resize only reloads when it needs larger frames.
     const load = () => {
@@ -213,8 +256,11 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
       ro.disconnect();
       clearTimeout(t);
       genRef.current++;
+      alive = false;
       release(cacheRef.current);
       cacheRef.current = [];
+      if (introRef.current) release([introRef.current]);
+      introRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduced, mobile]);
@@ -231,12 +277,17 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
       if (n > 0) {
         const { start, travel } = geomRef.current;
         const p = reduced ? 1 : Math.min(1, Math.max(0, (window.scrollY - start) / travel));
+        // The brand card fades out over the first INTRO_FADE of the scroll (in 1/32 steps, so idle ticks don't redraw),
+        // then the frames play over the rest.
+        const alpha = reduced ? 0 : Math.round((1 - Math.min(1, p / INTRO_FADE)) * 32) / 32;
+        const fp = reduced ? 1 : Math.max(0, (p - INTRO_FADE) / (1 - INTRO_FADE));
         // Lenis already smooths the scroll, so the frame follows it directly: one whole frame per position.
-        const shown = Math.round(p * (n - 1));
+        const shown = Math.round(fp * (n - 1));
         const pos = posRef.current;
-        if (pos.dirty || shown !== pos.drawn) {
-          if (drawRef.current(shown)) {
+        if (pos.dirty || shown !== pos.drawn || alpha !== pos.alpha) {
+          if (drawRef.current(shown, alpha)) {
             pos.drawn = shown;
+            pos.alpha = alpha;
             pos.dirty = false;
           }
         }
@@ -268,17 +319,27 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
 
   const frame = (
     <>
-      <img
-        src={heroFrame(reduced ? HERO_FRAME_COUNT : 1, 960)}
-        alt=""
-        aria-hidden="true"
-        fetchPriority="high"
-        className={`absolute inset-0 size-full ${mobile ? "object-contain object-top" : "object-cover"} transition-opacity duration-500 ${ready ? "opacity-0" : "opacity-100"}`}
-      />
+      {/* Placeholder until the canvas has something to draw, placed exactly where the canvas will put it. */}
+      {reduced ? (
+        <img
+          src={heroFrame(HERO_FRAME_COUNT, 960)}
+          alt=""
+          aria-hidden="true"
+          fetchPriority="high"
+          className={`absolute inset-0 size-full ${mobile ? "object-contain object-top" : "object-cover"} transition-opacity duration-500 ${ready ? "opacity-0" : "opacity-100"}`}
+        />
+      ) : (
+        <div aria-hidden="true" className={`absolute inset-0 transition-opacity duration-500 ${ready ? "opacity-0" : "opacity-100"}`} style={{ background: INTRO_BG }}>
+          <img src={heroIntro(backingCap(mobile))} alt="" fetchPriority="high" className={`absolute inset-x-0 bottom-0 w-full object-cover ${mobile ? "h-full" : "h-[calc(100%-var(--main-nav-height))]"}`} />
+        </div>
+      )}
+      {/* Measures the see-through nav row on desktop, which the brand card stays below. */}
+      <div ref={navRowRef} aria-hidden="true" className="pointer-events-none invisible absolute inset-x-0 top-0 h-[var(--main-nav-height)]" />
       <canvas
         ref={canvasRef}
         data-hero-canvas
-        className="absolute inset-0 size-full"
+        // Hidden until it has drawn: an opaque canvas is black before its first draw and would cover the placeholder.
+        className={`absolute inset-0 size-full ${ready ? "" : "opacity-0"}`}
         role="img"
         aria-label="A walk through the Gruham showroom, from the entrance past draped mannequins to a bride in a red Kanjivaram."
       />

@@ -37,6 +37,12 @@ export function heroFrame(n: number, width: number): string {
   return `${base}/f_webp,q_auto:eco,e_sharpen:60,c_limit,w_${width}/gruham/hero/frame_${id}`;
 }
 
+/** Brand card shown as the hero's opening frame; it fades into frame 1 as scrolling starts. Source is 1170px wide. */
+export function heroIntro(width: number): string {
+  if (!useCloudinary) return "/hero-frames/intro.webp";
+  return `${base}/f_webp,q_auto:eco,c_limit,w_${width}/gruham/hero/intro`;
+}
+
 export const brandMark = (size = 96) => `${base}/f_auto,q_auto,w_${size * 2}/gruham/catalog/brand-mark`;
 
 /** Product-quality images in gruham/catalog, offered in admin image pickers. */

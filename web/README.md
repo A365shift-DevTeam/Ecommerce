@@ -31,6 +31,8 @@ Admin → "Reset demo data" restores the starting catalogue, orders and customer
 
 120 frames (16:9, 1920px source compressed to under 200 KB each) live in Cloudinary at `gruham/hero/frame_001` to `frame_120`. They are delivered as fixed WebP (not `f_auto`, which keeps a separate CDN copy per browser type) at 720, 1080 or 1440px, with eco quality and a light sharpen. The hero decodes them off the main thread with `createImageBitmap`.
 They are drawn on a canvas with "contain" sizing: never cropped, zoomed, blurred or covered with text.
+The opening frame is the Gruham brand card (`gruham/hero/intro`, from `web/.image-work/src/logo.png`), which fades into frame 1 as scrolling starts.
+
 Wide screens pin the frame full-screen while you scroll. Phones and portrait tablets pin a full-width 16:9 band under the header while the first shop sections scroll beneath it.
 The source frames were extracted from a video, so they cannot be sharper than that video. For crisper frames, re-export them from the original high-resolution render and rerun `npm run upload:frames -- --force`.
 
