@@ -1,5 +1,6 @@
 // Uploads the 120 showroom frames in ../converted to Cloudinary as gruham/hero/frame_001..120.
 // Reads credentials from ../.env.local. Safe to rerun: existing frames are skipped unless --force.
+// --src <dir> uploads from another folder under the repo root (e.g. converted-1920, the compressed 1920px frames).
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +23,8 @@ cloudinary.config({
 });
 
 const force = process.argv.includes("--force");
-const srcDir = path.join(root, "converted");
+const srcArg = process.argv.indexOf("--src");
+const srcDir = path.join(root, srcArg > -1 ? process.argv[srcArg + 1] : "converted");
 const files = (await readdir(srcDir)).filter((f) => f.endsWith(".webp")).sort();
 
 async function exists(publicId) {
@@ -46,6 +48,7 @@ async function uploadOne(file, i) {
     public_id: publicId,
     asset_folder: "gruham/hero",
     overwrite: true,
+    invalidate: true, // purge CDN copies of the old frame under the same public id
     resource_type: "image",
   });
   done++;

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useReducedMotion } from "motion/react";
-import { HERO_FRAME_COUNT, heroFrame } from "../../lib/cloudinary";
+import { HERO_FRAME_COUNT, HERO_WIDTHS, heroFrame } from "../../lib/cloudinary";
 import { useIsMobile } from "../../hooks/useIsMobile";
 
 /*
@@ -13,22 +13,25 @@ import { useIsMobile } from "../../hooks/useIsMobile";
   - `mobileContent` renders inside the sticky wrapper, directly under the frames,
     so there is no empty space while the frames play.
   DESKTOP (> 1024px):
-  - Section pins the full viewport; the frame fills the whole area under the header edge to edge
+  - Section pins the full viewport; the frame fills everything below the announcement bar edge to edge
     (centre crop of whatever does not fit the screen's shape).
+  - The header's main row is see-through over the frame until the frames finish (Header.tsx).
   Page content after the hero only scrolls once all frames have played.
 
-  Smoothness: Lenis smooths the scroll; all 120 frames are pre-rendered once at their exact
-  on-screen size, so a scroll tick is a single 1:1 copy with no decoding or resampling.
+  Speed: frames are fetched and decoded off the main thread (createImageBitmap) at roughly the size
+  they are drawn, and kept as decoded bitmaps. An earlier version pre-rendered every frame into its own
+  full-size canvas, which blocked the main thread for about 7 s while the 120 frames loaded.
+  Smoothness: Lenis smooths the scroll; a scroll tick is one drawImage of an already decoded bitmap.
   Each scroll position shows exactly one frame: no blending between frames (that read as motion blur).
 */
 
 const FRAME_STEP = 1; // all 120 frames, so each step between frames is small
-// Per-frame cache width caps: keeps 120 cached frames within phone and laptop memory.
+// Per-frame width caps: keeps 120 decoded frames within phone and laptop memory.
 const backingCap = (mobile: boolean) => (mobile ? 720 : 1440);
 
 function sourceWidth(cssWidth: number, mobile: boolean) {
   const need = Math.min(cssWidth * Math.min(window.devicePixelRatio || 1, 2), backingCap(mobile));
-  return [960, 1280, 1600, 1920].find((w) => w >= need) ?? 1920;
+  return HERO_WIDTHS.find((w) => w >= need) ?? HERO_WIDTHS[HERO_WIDTHS.length - 1];
 }
 
 /** Coarse-to-fine load order: every 8th frame first, then 4th, 2nd, then the rest. */
@@ -42,6 +45,35 @@ function loadOrder(n: number) {
   return order;
 }
 
+type Frame = ImageBitmap | HTMLImageElement;
+
+const frameSize = (f: Frame) => (f instanceof HTMLImageElement ? [f.naturalWidth, f.naturalHeight] : [f.width, f.height]);
+
+function release(frames: (Frame | null)[]) {
+  for (const f of frames) if (f && !(f instanceof HTMLImageElement)) f.close();
+}
+
+/** Download and decode one frame off the main thread; falls back to <img> where createImageBitmap is missing. */
+async function loadFrame(url: string): Promise<Frame | null> {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return await createImageBitmap(await res.blob());
+    } catch {
+      // fall through to <img>
+    }
+  }
+  const im = new Image();
+  im.decoding = "async";
+  im.src = url;
+  try {
+    await im.decode();
+  } catch {
+    return im.naturalWidth ? im : null;
+  }
+  return im;
+}
+
 /** cover: desktop fills the box edge to edge (centre crop); otherwise the frame is drawn whole. */
 type Rect = { cw: number; ch: number; x: number; y: number; w: number; h: number; cover: boolean };
 
@@ -53,7 +85,7 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const urlsRef = useRef<string[]>([]);
-  const cacheRef = useRef<(HTMLCanvasElement | null)[]>([]);
+  const cacheRef = useRef<(Frame | null)[]>([]);
   const rectRef = useRef<Rect | null>(null);
   const geomRef = useRef({ start: 0, travel: 1 });
   const posRef = useRef({ current: 0, drawn: -1, dirty: true, t: 0 });
@@ -76,7 +108,7 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
   const layout = () => {
     const box = boxRef.current;
     const canvas = canvasRef.current;
-    if (!box || !canvas) return false;
+    if (!box || !canvas) return;
     const scale = Math.min(window.devicePixelRatio || 1, 2, backingCap(mobile) / Math.max(1, box.clientWidth));
     const cw = Math.max(1, Math.round(box.clientWidth * scale));
     const ch = Math.max(1, Math.round(box.clientHeight * scale));
@@ -86,14 +118,10 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
     const s = cover ? Math.max(cw / 16, ch / 9) : Math.min(cw / 16, ch / 9);
     const w = cover ? cw : Math.round(16 * s);
     const h = cover ? ch : Math.round(9 * s);
-    const next = { cw, ch, w, h, cover, x: Math.round((cw - w) / 2), y: cover || mobile ? 0 : Math.round((ch - h) / 2) };
-    const prev = rectRef.current;
-    const changed = !prev || prev.w !== w || prev.h !== h;
     canvas.width = cw;
     canvas.height = ch;
-    rectRef.current = next;
+    rectRef.current = { cw, ch, w, h, cover, x: Math.round((cw - w) / 2), y: cover || mobile ? 0 : Math.round((ch - h) / 2) };
     posRef.current.dirty = true;
-    return changed;
   };
 
   const draw = (pos: number) => {
@@ -107,56 +135,42 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
     let a = cache[i];
     for (let d = 1; !a && d < cache.length; d++) a = cache[i - d] ?? cache[i + d] ?? null;
     if (!a) return false;
+    const [fw, fh] = frameSize(a);
+    let sx = 0, sy = 0, sw = fw, sh = fh;
+    if (rect.cover) {
+      // Crop the centre of the frame to the box's aspect ratio.
+      const k = Math.max(rect.w / fw, rect.h / fh);
+      sw = rect.w / k;
+      sh = rect.h / k;
+      sx = (fw - sw) / 2;
+      sy = (fh - sh) / 2;
+    }
+    ctx.imageSmoothingQuality = "high";
     ctx.fillStyle = "#1c0b10";
     ctx.fillRect(0, 0, rect.cw, rect.ch);
-    ctx.drawImage(a, rect.x, rect.y);
+    ctx.drawImage(a, sx, sy, sw, sh, rect.x, rect.y, rect.w, rect.h);
     return true;
   };
   const drawRef = useRef(draw);
   drawRef.current = draw;
 
-  /** Load one frame and pre-render it at the exact draw size. */
-  const renderFrame = (i: number, gen: number) =>
-    new Promise<void>((resolve) => {
-      const im = new Image();
-      im.decoding = "async";
-      im.src = urlsRef.current[i];
-      const done = () => {
-        const rect = rectRef.current;
-        if (gen !== genRef.current || !rect || !im.naturalWidth) return resolve();
-        const c = document.createElement("canvas");
-        c.width = rect.w;
-        c.height = rect.h;
-        const cx = c.getContext("2d", { alpha: false })!;
-        cx.imageSmoothingEnabled = true;
-        cx.imageSmoothingQuality = "high";
-        if (rect.cover) {
-          // Crop the centre of the frame to the box's aspect ratio, then scale to fit exactly.
-          const k = Math.max(rect.w / im.naturalWidth, rect.h / im.naturalHeight);
-          const sw = rect.w / k;
-          const sh = rect.h / k;
-          cx.drawImage(im, (im.naturalWidth - sw) / 2, (im.naturalHeight - sh) / 2, sw, sh, 0, 0, rect.w, rect.h);
-        } else {
-          cx.drawImage(im, 0, 0, rect.w, rect.h);
-        }
-        cacheRef.current[i] = c;
-        posRef.current.dirty = true;
-        if (i === 0 || (reduced && i === urlsRef.current.length - 1)) setReady(true);
-        setLoaded((n) => n + 1);
-        resolve();
-      };
-      im.decode().then(done, () => {
-        im.onload = done;
-        im.onerror = () => resolve();
-        if (im.complete) done();
-      });
-    });
+  /** Load one decoded frame into the cache, unless a newer build has replaced this one. */
+  const renderFrame = async (i: number, gen: number) => {
+    const f = await loadFrame(urlsRef.current[i]);
+    if (!f) return;
+    if (gen !== genRef.current) return release([f]);
+    cacheRef.current[i] = f;
+    posRef.current.dirty = true;
+    if (i === 0 || (reduced && i === urlsRef.current.length - 1)) setReady(true);
+    setLoaded((n) => n + 1);
+  };
 
-  /** (Re)build the frame cache: on first load and whenever the frame's on-screen size changes. */
+  /** (Re)build the frame cache: on first load and whenever larger frames are needed. */
   const build = () => {
     const gen = ++genRef.current;
     const n = urlsRef.current.length;
-    if (cacheRef.current.length !== n) cacheRef.current = new Array(n).fill(null);
+    release(cacheRef.current);
+    cacheRef.current = new Array(n).fill(null);
     setLoaded(0);
     const queue = reduced ? [n - 1] : loadOrder(n);
     Array.from({ length: 6 }, async () => {
@@ -171,18 +185,25 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
     const list: number[] = [];
     for (let n = 1; n <= HERO_FRAME_COUNT; n += FRAME_STEP) list.push(n);
     if (list[list.length - 1] !== HERO_FRAME_COUNT) list.push(HERO_FRAME_COUNT);
-    const coverWidth = mobile ? box.clientWidth : Math.max(box.clientWidth, (box.clientHeight * 16) / 9);
-    urlsRef.current = list.map((n) => heroFrame(n, sourceWidth(coverWidth, mobile)));
-    cacheRef.current = new Array(list.length).fill(null);
-    rectRef.current = null;
+    let width = 0;
+    // Frames are scaled on every draw, so a resize only reloads when it needs larger frames.
+    const load = () => {
+      const coverWidth = mobile ? box.clientWidth : Math.max(box.clientWidth, (box.clientHeight * 16) / 9);
+      const w = sourceWidth(coverWidth, mobile);
+      if (w <= width) return;
+      width = w;
+      urlsRef.current = list.map((n) => heroFrame(n, w));
+      build();
+    };
     layout();
-    build();
+    load();
     measure();
     let t = 0;
     const ro = new ResizeObserver(() => {
       clearTimeout(t);
       t = window.setTimeout(() => {
-        if (layout()) build();
+        layout();
+        load();
         measure();
       }, 150);
     });
@@ -192,9 +213,12 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
       ro.disconnect();
       clearTimeout(t);
       genRef.current++;
+      release(cacheRef.current);
+      cacheRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduced, mobile]);
+
 
   // Render loop: runs only while the hero is on screen.
   useEffect(() => {
@@ -298,7 +322,8 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
   return (
     <section ref={sectionRef} aria-label="Inside the Gruham studio" className={reduced ? "relative h-[100svh]" : "relative h-[420vh]"}>
       <div ref={stickyRef} className="sticky top-0 h-[100svh] overflow-hidden bg-velvet">
-        <div ref={boxRef} className="absolute inset-x-0 bottom-0 top-[var(--nav-height)]">
+        {/* Starts under the announcement bar: the header's main row is see-through while the frames play. */}
+        <div ref={boxRef} className="absolute inset-x-0 bottom-0 top-[var(--announce-height)]">
           {frame}
         </div>
       </div>

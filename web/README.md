@@ -29,14 +29,14 @@ Admin → "Reset demo data" restores the starting catalogue, orders and customer
 
 ## Hero frames
 
-120 frames (16:9, 4K source) live in Cloudinary at `gruham/hero/frame_001` to `frame_120`, delivered at Cloudinary's eco automatic quality with a light sharpen (catalogue images use standard `q_auto`) to keep page weight down.
+120 frames (16:9, 1920px source compressed to under 200 KB each) live in Cloudinary at `gruham/hero/frame_001` to `frame_120`. They are delivered as fixed WebP (not `f_auto`, which keeps a separate CDN copy per browser type) at 720, 1080 or 1440px, with eco quality and a light sharpen. The hero decodes them off the main thread with `createImageBitmap`.
 They are drawn on a canvas with "contain" sizing: never cropped, zoomed, blurred or covered with text.
 Wide screens pin the frame full-screen while you scroll. Phones and portrait tablets pin a full-width 16:9 band under the header while the first shop sections scroll beneath it.
 The source frames were extracted from a video, so they cannot be sharper than that video. For crisper frames, re-export them from the original high-resolution render and rerun `npm run upload:frames -- --force`.
 
 ## Scripts
 
-- `npm run upload:frames`: uploads `../converted/*.webp` to `gruham/hero` (skips frames already uploaded; `--force` to overwrite).
+- `npm run upload:frames`: uploads `../converted/*.webp` to `gruham/hero` (skips frames already uploaded; `--force` to overwrite; `-- --src converted-1920` to upload the compressed frames).
 - `npm run prepare:images`: builds the 4:5 catalogue images and uploads them to `gruham/catalog`.
 - `node scripts/organize-cloudinary-folders.mjs`: puts uploaded assets into Media Library folders (needed on dynamic-folder accounts).
 

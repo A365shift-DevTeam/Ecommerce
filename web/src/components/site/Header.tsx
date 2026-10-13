@@ -7,6 +7,7 @@ import { useCartSummary, useCurrentUser, useStore } from "../../store/useStore";
 import { occasions } from "../../data/seed";
 import { money } from "../../lib/format";
 import { lockScroll } from "../../lib/smoothScroll";
+import { useIsMobile } from "../../hooks/useIsMobile";
 
 const announcements = [
   "Free insured shipping on orders above ₹2,999",
@@ -23,13 +24,13 @@ const priceBands = [
 
 type MenuKey = "saree" | "jewellery";
 
-export function Wordmark() {
+export function Wordmark({ light = false }: { light?: boolean }) {
   return (
     <Link to="/" className="flex shrink-0 items-center gap-2.5" aria-label="Gruham home">
       <img src={brandMark(44)} alt="" width={44} height={44} className="size-9 rounded-full md:size-11" />
       <span className="flex flex-col leading-none">
-        <span className="font-display text-[1.2rem] tracking-[0.2em] text-fg md:text-[1.4rem]">GRUHAM</span>
-        <span className="mt-1 hidden text-[0.6rem] tracking-[0.18em] text-fg-3 sm:block">SAREES & JEWELLERY</span>
+        <span className={`font-display text-[1.2rem] tracking-[0.2em] transition-colors duration-300 md:text-[1.4rem] ${light ? "text-white" : "text-fg"}`}>GRUHAM</span>
+        <span className={`mt-1 hidden text-[0.6rem] tracking-[0.18em] transition-colors duration-300 sm:block ${light ? "text-white/75" : "text-fg-3"}`}>SAREES & JEWELLERY</span>
       </span>
     </Link>
   );
@@ -81,6 +82,33 @@ export function Header() {
     lockScroll(menuOpen || searchOpen);
   }, [menuOpen, searchOpen]);
 
+  // Desktop home: the main row is see-through over the showroom frames until they finish playing
+  // (when #hero-end, the bottom of the pinned hero, reaches the bottom of the screen).
+  const mobile = useIsMobile();
+  const [overHero, setOverHero] = useState(false);
+  useEffect(() => {
+    if (mobile || pathname !== "/") return setOverHero(false);
+    let raf = 0;
+    const check = () => {
+      raf = 0;
+      const end = document.getElementById("hero-end");
+      setOverHero(!!end && end.getBoundingClientRect().top > window.innerHeight + 1);
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(check);
+    };
+    check();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  }, [mobile, pathname]);
+  const clear = overHero && !mega;
+  const hoverBg = clear ? "hover:bg-white/10" : "hover:bg-paper";
+
   const openMega = (k: MenuKey) => {
     clearTimeout(closeTimer.current);
     setMega(k);
@@ -100,14 +128,20 @@ export function Header() {
 
   return (
     <>
-      <header className="fixed inset-x-0 top-0 z-40 h-[var(--nav-height)] bg-page" onMouseLeave={closeMega}>
+      <header
+        className={`fixed inset-x-0 top-0 z-40 h-[var(--nav-height)] transition-colors duration-300 ${clear ? "bg-transparent text-white" : "bg-page text-fg"}`}
+        onMouseLeave={closeMega}
+      >
         <AnnouncementBar />
-        <div className="h-[var(--main-nav-height)] border-b border-hair">
-          <div className="mx-auto flex h-full max-w-[1400px] items-center gap-3 px-4 sm:px-6 lg:gap-6 lg:px-10">
-            <button className="-ml-2 grid size-11 place-items-center rounded-full hover:bg-paper lg:hidden" aria-label="Open menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}>
+        <div className="relative h-[var(--main-nav-height)]">
+          {/* Solid row and its hairline fade out over the hero; a soft shade keeps the white text readable on bright frames. */}
+          <div aria-hidden="true" className={`absolute inset-0 border-b border-hair bg-page transition-opacity duration-300 ${clear ? "opacity-0" : "opacity-100"}`} />
+          <div aria-hidden="true" className={`pointer-events-none absolute inset-x-0 top-0 h-[180%] bg-gradient-to-b from-black/55 via-black/25 to-transparent transition-opacity duration-300 ${clear ? "opacity-100" : "opacity-0"}`} />
+          <div className="relative mx-auto flex h-full max-w-[1400px] items-center gap-3 px-4 sm:px-6 lg:gap-6 lg:px-10">
+            <button className={`-ml-2 grid size-11 place-items-center rounded-full ${hoverBg} lg:hidden`} aria-label="Open menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}>
               <List size={22} />
             </button>
-            <Wordmark />
+            <Wordmark light={clear} />
 
             <nav aria-label="Main" className="ml-4 hidden h-full items-stretch lg:flex">
               {links.map((l) => (
@@ -117,7 +151,11 @@ export function Header() {
                     aria-haspopup={l.menu ? "true" : undefined}
                     aria-expanded={l.menu ? mega === l.menu : undefined}
                     onFocus={() => l.menu && openMega(l.menu)}
-                    className={`flex items-center gap-1 border-b-2 px-3 text-[0.9rem] font-medium transition-colors ${mega && l.menu === mega ? "border-brand text-brand" : "border-transparent text-fg hover:text-brand"} ${l.label === "Offers" ? "text-brand" : ""}`}
+                    className={`flex items-center gap-1 border-b-2 px-3 text-[0.9rem] font-medium transition-colors ${
+                      clear
+                        ? "border-transparent text-white hover:text-white/75"
+                        : `${mega && l.menu === mega ? "border-brand text-brand" : "border-transparent text-fg hover:text-brand"} ${l.label === "Offers" ? "text-brand" : ""}`
+                    }`}
                   >
                     {l.label}
                     {l.menu && <CaretDown size={12} weight="bold" className="opacity-60" />}
@@ -129,20 +167,22 @@ export function Header() {
             <div className="ml-auto flex items-center gap-1 sm:gap-2">
               <button
                 onClick={() => setSearchOpen(true)}
-                className="hidden h-11 w-64 items-center gap-2 rounded-lg border border-hair-2 bg-paper px-3.5 text-left text-[0.85rem] text-fg-3 hover:border-fg-3 xl:flex"
+                className={`hidden h-11 w-64 items-center gap-2 rounded-lg border px-3.5 text-left text-[0.85rem] transition-colors duration-300 xl:flex ${
+                  clear ? "border-white/35 bg-white/10 text-white/80 backdrop-blur-sm hover:border-white/60" : "border-hair-2 bg-paper text-fg-3 hover:border-fg-3"
+                }`}
               >
-                <MagnifyingGlass size={17} className="text-fg-2" /> Search sarees, jewellery…
+                <MagnifyingGlass size={17} className={clear ? "text-white" : "text-fg-2"} /> Search sarees, jewellery…
               </button>
-              <button onClick={() => setSearchOpen(true)} aria-label="Search" className="grid size-11 place-items-center rounded-full hover:bg-paper xl:hidden">
+              <button onClick={() => setSearchOpen(true)} aria-label="Search" className={`grid size-11 place-items-center rounded-full ${hoverBg} xl:hidden`}>
                 <MagnifyingGlass size={21} />
               </button>
-              <HeaderIcon to="/account" label={user ? user.name.split(" ")[0] : "Account"} className="hidden md:flex">
+              <HeaderIcon to="/account" label={user ? user.name.split(" ")[0] : "Account"} className={`hidden md:flex ${hoverBg}`}>
                 <User size={21} />
               </HeaderIcon>
-              <HeaderIcon to="/account/wishlist" label="Wishlist" count={wishCount} className="hidden sm:flex">
+              <HeaderIcon to="/account/wishlist" label="Wishlist" count={wishCount} className={`hidden sm:flex ${hoverBg}`}>
                 <Heart size={21} />
               </HeaderIcon>
-              <button onClick={() => setCartOpen(true)} aria-label={`Bag, ${count} items`} className="relative flex min-h-11 min-w-11 flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 hover:bg-paper">
+              <button onClick={() => setCartOpen(true)} aria-label={`Bag, ${count} items`} className={`relative flex min-h-11 min-w-11 flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 ${hoverBg}`}>
                 <ShoppingBag size={21} />
                 <span className="hidden text-[0.68rem] font-medium md:block">Bag</span>
                 {count > 0 && <CountBadge n={count} />}
@@ -175,7 +215,7 @@ export function Header() {
 
 function HeaderIcon({ to, label, count, children, className = "" }: { to: string; label: string; count?: number; children: React.ReactNode; className?: string }) {
   return (
-    <Link to={to} aria-label={count ? `${label}, ${count} items` : label} className={`relative min-h-11 min-w-11 flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 hover:bg-paper ${className}`}>
+    <Link to={to} aria-label={count ? `${label}, ${count} items` : label} className={`relative min-h-11 min-w-11 flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 ${className}`}>
       {children}
       <span className="hidden max-w-16 truncate text-[0.68rem] font-medium md:block">{label}</span>
       {!!count && <CountBadge n={count} />}

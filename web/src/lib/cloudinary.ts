@@ -21,15 +21,20 @@ export function srcSet(id: string, widths = [320, 480, 720, 960, 1200]): string 
   return widths.map((w) => `${img(id, w)} ${w}w`).join(", ");
 }
 
+/** The only widths the hero requests, so every visitor shares the same few CDN-cached copies. */
+export const HERO_WIDTHS = [720, 1080, 1440] as const;
+
 /**
  * Hero frame n (1-based). All 120 frames load for the scroll animation, so delivery uses
- * Cloudinary's eco quality (about half the bytes of q_auto:best) plus a light sharpen for the soft video source.
+ * Cloudinary's eco quality (about half the bytes of q_auto:best) plus a light sharpen.
+ * Fixed WebP rather than f_auto: f_auto keeps a separate CDN copy per browser type, so phones kept
+ * hitting cold copies (about 1.5 s per frame). One format means one cached URL for everyone.
  * Falls back to /hero-frames when Cloudinary is switched off.
  */
 export function heroFrame(n: number, width: number): string {
   const id = String(n).padStart(3, "0");
   if (!useCloudinary) return `/hero-frames/frame_${id}.webp`;
-  return `${base}/f_auto,q_auto:eco,e_sharpen:60,c_limit,w_${width}/gruham/hero/frame_${id}`;
+  return `${base}/f_webp,q_auto:eco,e_sharpen:60,c_limit,w_${width}/gruham/hero/frame_${id}`;
 }
 
 export const brandMark = (size = 96) => `${base}/f_auto,q_auto,w_${size * 2}/gruham/catalog/brand-mark`;

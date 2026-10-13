@@ -10,6 +10,7 @@ web/.image-work/
 
 # Large local source assets (frames and catalogue images are hosted on Cloudinary)
 converted/
+converted-1920/
 *.mp4
 WhatsApp Unknown*/
 
