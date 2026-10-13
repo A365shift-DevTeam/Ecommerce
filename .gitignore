@@ -1,0 +1,23 @@
+# Dependencies and builds
+node_modules/
+dist/
+web/.image-work/
+
+# Secrets: Cloudinary API key and secret live here. Never commit.
+.env
+.env.*
+!.env.example
+
+# Large local source assets (frames and catalogue images are hosted on Cloudinary)
+converted/
+*.mp4
+WhatsApp Unknown*/
+
+# Local tooling
+.playwright-mcp/
+.claude/
+.agents/
+skills-lock.json
+*.log
+.DS_Store
+Thumbs.db
