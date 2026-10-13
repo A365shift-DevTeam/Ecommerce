@@ -29,7 +29,7 @@ Admin → "Reset demo data" restores the starting catalogue, orders and customer
 
 ## Hero frames
 
-120 frames (16:9, 4K source) live in Cloudinary at `gruham/hero/frame_001` to `frame_120`, delivered at Cloudinary's best automatic quality with a light sharpen.
+120 frames (16:9, 4K source) live in Cloudinary at `gruham/hero/frame_001` to `frame_120`, delivered at Cloudinary's eco automatic quality with a light sharpen (catalogue images use standard `q_auto`) to keep page weight down.
 They are drawn on a canvas with "contain" sizing: never cropped, zoomed, blurred or covered with text.
 Wide screens pin the frame full-screen while you scroll. Phones and portrait tablets pin a full-width 16:9 band under the header while the first shop sections scroll beneath it.
 The source frames were extracted from a video, so they cannot be sharper than that video. For crisper frames, re-export them from the original high-resolution render and rerun `npm run upload:frames -- --force`.

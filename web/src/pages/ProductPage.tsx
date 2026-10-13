@@ -341,7 +341,7 @@ function ZoomImage({ id, alt, onExpand }: { id: string; alt: string; onExpand: (
           <div
             aria-hidden="true"
             className="absolute inset-0 bg-no-repeat"
-            style={{ backgroundImage: `url(${img(id, 2400)})`, backgroundSize: "250%", backgroundPosition: `${lens.x}% ${lens.y}%` }}
+            style={{ backgroundImage: `url(${img(id, 1200)})`, backgroundSize: "250%", backgroundPosition: `${lens.x}% ${lens.y}%` }}
           />
         )}
       </div>
@@ -393,7 +393,7 @@ function ZoomViewer({ images, start, onClose }: { images: string[]; start: numbe
         }}
       >
         <img
-          src={img(images[i], 2400)}
+          src={img(images[i], 1200)}
           alt=""
           className="absolute inset-0 size-full object-contain transition-transform duration-500 ease-[var(--ease-silk)]"
           style={{ transform: zoomed ? "scale(2.4)" : "scale(1)", transformOrigin: origin }}
