@@ -148,7 +148,7 @@ export default function ProductPage() {
                         key={s}
                         onClick={() => setSize(s)}
                         aria-pressed={size === s}
-                        className={`min-h-11 rounded-lg border px-4 text-[0.85rem] font-medium transition-colors ${size === s ? "border-fg bg-fg text-white" : "border-hair-2 text-fg hover:border-fg"}`}
+                        className={`min-h-11 rounded-lg border px-4 text-[0.85rem] font-medium transition-colors ${size === s ? "border-brand bg-brand text-on-brand" : "border-hair-2 text-fg hover:border-fg"}`}
                       >
                         {s}
                       </button>
@@ -449,7 +449,7 @@ function DeliveryCheck() {
             className="min-h-11 w-full rounded-lg border border-hair-2 bg-page pl-10 pr-4 text-fg tabular placeholder:text-fg-3 focus:border-fg focus:outline-none"
           />
         </div>
-        <button className="min-h-11 rounded-lg bg-fg px-5 text-sm font-semibold text-white hover:bg-brand">Check</button>
+        <button className="min-h-11 rounded-[2px] border border-brand px-5 text-[0.7rem] font-medium uppercase tracking-[0.18em] text-fg hover:bg-brand hover:text-on-brand">Check</button>
       </div>
       {result && <p className={`mt-3 text-sm ${result.ok ? "text-success" : "text-error"}`}>{result.text}</p>}
     </form>

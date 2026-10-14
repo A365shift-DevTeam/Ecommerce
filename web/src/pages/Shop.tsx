@@ -217,7 +217,7 @@ export default function Shop() {
               key={l}
               onClick={() => setParam("type", v || null)}
               aria-pressed={effectiveType === v && !category}
-              className={`min-h-10 shrink-0 rounded-full border px-4 text-[0.85rem] font-medium ${effectiveType === v && !category ? "border-fg bg-fg text-white" : "border-hair-2 text-fg hover:border-fg"}`}
+              className={`min-h-10 shrink-0 rounded-full border px-4 text-[0.85rem] font-medium ${effectiveType === v && !category ? "border-brand bg-brand text-on-brand" : "border-hair-2 text-fg hover:border-fg"}`}
             >
               {l}
             </button>
@@ -230,7 +230,7 @@ export default function Shop() {
                 key={c.id}
                 onClick={() => setParam("category", category === c.slug ? null : c.slug)}
                 aria-pressed={category === c.slug}
-                className={`min-h-10 shrink-0 rounded-full border px-4 text-[0.85rem] font-medium ${category === c.slug ? "border-fg bg-fg text-white" : "border-hair-2 text-fg hover:border-fg"}`}
+                className={`min-h-10 shrink-0 rounded-full border px-4 text-[0.85rem] font-medium ${category === c.slug ? "border-brand bg-brand text-on-brand" : "border-hair-2 text-fg hover:border-fg"}`}
               >
                 {c.name}
               </button>
@@ -323,7 +323,7 @@ export default function Shop() {
       <AnimatePresence>
         {(drawer || sortSheet) && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[55] bg-black/40 lg:hidden" onClick={() => (setDrawer(false), setSortSheet(false))} />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[55] bg-black/60 backdrop-blur-sm lg:hidden" onClick={() => (setDrawer(false), setSortSheet(false))} />
             <motion.div
               role="dialog"
               aria-modal="true"
@@ -474,7 +474,7 @@ function FacetPanel({
               return (
                 <button key={c.name} onClick={() => toggle("colors", c.name)} aria-pressed={on} title={c.name} className="flex min-h-11 flex-col items-center gap-1">
                   <span className={`grid size-8 place-items-center rounded-full ring-1 ring-offset-2 ring-offset-page transition ${on ? "ring-2 ring-fg" : "ring-hair-2"}`} style={{ background: c.hex }}>
-                    {on && <Check size={13} weight="bold" className={["Ivory", "Gold", "Mustard"].includes(c.name) ? "text-fg" : "text-white"} />}
+                    {on && <Check size={13} weight="bold" className={["Ivory", "Gold", "Mustard"].includes(c.name) ? "text-on-brand" : "text-white"} />}
                   </span>
                   <span className="text-[0.68rem] text-fg-2">{c.name}</span>
                 </button>

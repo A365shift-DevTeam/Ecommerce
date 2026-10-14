@@ -9,6 +9,7 @@ import {
   PromoTiles,
   ServiceBand,
   ShopByPrice,
+  StorySection,
   StudioIntro,
   TrustStrip,
 } from "../components/home/sections";
@@ -21,10 +22,11 @@ export default function Home() {
       <HeroScroll mobileContent={<StudioIntro />} />
       <TrustStrip />
       <CategoryCircles />
-      <FeaturedCollections />
       <PromoTiles />
-      <Bestsellers />
+      <FeaturedCollections />
       <ShopByPrice />
+      <Bestsellers />
+      <StorySection />
       <OfferBand />
       <NewArrivals />
       <CustomerReviews />

@@ -84,7 +84,7 @@ export function OrderSummary({ cta, compact = false }: { cta?: React.ReactNode; 
             <li key={l.productId + l.size} className="flex items-center gap-3 text-sm">
               <div className="relative">
                 <img src={img(l.product.images[0], 120)} alt="" className="h-14 w-11 rounded-[4px] object-cover" />
-                <span className="absolute -right-2 -top-2 grid size-5 place-items-center rounded-full bg-brand text-[0.68rem] font-bold text-white">{l.qty}</span>
+                <span className="absolute -right-2 -top-2 grid size-5 place-items-center rounded-full bg-brand text-[0.68rem] font-bold text-on-brand">{l.qty}</span>
               </div>
               <span className="flex-1 text-fg">{l.product.name}</span>
               <span className="tabular">{money((l.product.salePrice ?? l.product.mrp) * l.qty)}</span>

@@ -17,7 +17,8 @@ export function ProductCard({ product, sizes = "(min-width: 1024px) 25vw, (min-w
 
   return (
     <article className="group/card relative flex flex-col">
-      <div className="relative overflow-hidden rounded-lg bg-paper">
+      {/* Image in a gold hairline frame that brightens on hover */}
+      <div className="relative overflow-hidden rounded-[2px] border border-hair bg-paper transition-colors duration-500 group-hover/card:border-brand/60">
         <Link to={`/product/${product.slug}`} className="block aspect-[3/4]" aria-label={product.name}>
           <img
             src={img(first, 640)}
@@ -37,6 +38,7 @@ export function ProductCard({ product, sizes = "(min-width: 1024px) 25vw, (min-w
               className="absolute inset-0 size-full object-cover opacity-0 transition-opacity duration-700 group-hover/card:opacity-100"
             />
           )}
+          <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-page/70 to-transparent" />
         </Link>
 
         {/* Badges */}
@@ -45,9 +47,9 @@ export function ProductCard({ product, sizes = "(min-width: 1024px) 25vw, (min-w
             <Badge tone="dark">Sold out</Badge>
           ) : (
             <>
-              {off > 0 && <Badge tone="brand">{off}% OFF</Badge>}
-              {product.isNew && <Badge>NEW</Badge>}
-              {product.bestseller && !product.isNew && <Badge tone="gold">BESTSELLER</Badge>}
+              {off > 0 && <Badge tone="brand">{off}% off</Badge>}
+              {product.isNew && <Badge>New</Badge>}
+              {product.bestseller && !product.isNew && <Badge tone="gold">Bestseller</Badge>}
             </>
           )}
         </div>
@@ -56,9 +58,9 @@ export function ProductCard({ product, sizes = "(min-width: 1024px) 25vw, (min-w
           onClick={() => toggleWishlist(product.id)}
           aria-pressed={wished}
           aria-label={wished ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
-          className="absolute right-2.5 top-2.5 grid size-10 place-items-center rounded-full bg-page/95 text-fg shadow-[0_1px_4px_rgba(36,22,25,0.12)] transition-transform hover:scale-105 active:scale-90"
+          className="absolute right-2.5 top-2.5 grid size-10 place-items-center rounded-full border border-hair-2 bg-page/70 text-fg backdrop-blur-sm transition-[transform,color,border-color] hover:scale-105 hover:border-brand hover:text-brand active:scale-90"
         >
-          <Heart size={18} weight={wished ? "fill" : "regular"} className={wished ? "text-brand" : ""} />
+          <Heart size={18} weight={wished ? "fill" : "light"} className={wished ? "text-brand" : ""} />
         </button>
 
         {/* Quick add: full-width bar on hover (desktop), round button (touch) */}
@@ -66,14 +68,14 @@ export function ProductCard({ product, sizes = "(min-width: 1024px) 25vw, (min-w
           <>
             <button
               onClick={() => addToCart(product.id)}
-              className="absolute inset-x-2.5 bottom-2.5 hidden min-h-11 translate-y-2 items-center justify-center gap-2 rounded-lg bg-page/95 text-[0.85rem] font-semibold text-fg opacity-0 shadow-[0_2px_8px_rgba(36,22,25,0.15)] transition-all duration-300 hover:bg-brand hover:text-white focus-visible:translate-y-0 focus-visible:opacity-100 group-hover/card:translate-y-0 group-hover/card:opacity-100 lg:flex"
+              className="absolute inset-x-2.5 bottom-2.5 hidden min-h-11 translate-y-2 items-center justify-center gap-2.5 rounded-[2px] border border-brand bg-page/90 text-[0.68rem] font-medium uppercase tracking-[0.2em] text-fg opacity-0 backdrop-blur-sm transition-all duration-300 hover:bg-brand hover:text-on-brand focus-visible:translate-y-0 focus-visible:opacity-100 group-hover/card:translate-y-0 group-hover/card:opacity-100 lg:flex"
             >
-              <ShoppingBag size={16} /> Add to bag
+              <ShoppingBag size={15} /> Add to bag
             </button>
             <button
               onClick={() => addToCart(product.id)}
               aria-label={`Add ${product.name} to bag`}
-              className="absolute bottom-2.5 right-2.5 grid size-10 place-items-center rounded-full bg-brand text-white shadow-[0_2px_6px_rgba(36,22,25,0.25)] active:scale-90 lg:hidden"
+              className="gold-fill absolute bottom-2.5 right-2.5 grid size-10 place-items-center rounded-full text-on-brand shadow-[0_4px_14px_rgba(0,0,0,0.4)] active:scale-90 lg:hidden"
             >
               <ShoppingBag size={17} />
             </button>
@@ -81,17 +83,17 @@ export function ProductCard({ product, sizes = "(min-width: 1024px) 25vw, (min-w
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-1 pt-3">
-        <p className="text-[0.75rem] text-fg-3">{product.fabric}</p>
-        <h3 className="line-clamp-2 text-[0.92rem] font-medium leading-snug text-fg">
-          <Link to={`/product/${product.slug}`} className="hover:underline hover:underline-offset-2">
+      <div className="flex flex-1 flex-col gap-1.5 pt-4">
+        <p className="text-[0.62rem] font-medium uppercase tracking-[0.22em] text-brand">{product.fabric}</p>
+        <h3 className="line-clamp-2 font-display text-[1.02rem] leading-snug text-fg sm:text-[1.1rem]">
+          <Link to={`/product/${product.slug}`} className="transition-colors hover:text-gold-light">
             {product.name}
           </Link>
         </h3>
         {product.reviews > 0 && <Stars rating={product.rating} reviews={product.reviews} size={12} />}
         <div className="mt-auto pt-1">
           <Price mrp={product.mrp} sale={product.salePrice} />
-          {low && <p className="mt-0.5 text-[0.78rem] font-medium text-error">Only {product.stock} left</p>}
+          {low && <p className="mt-1 text-[0.72rem] font-medium text-error">Only {product.stock} left</p>}
         </div>
       </div>
     </article>

@@ -1,15 +1,27 @@
 @import "tailwindcss";
 @import "@fontsource/marcellus/400.css";
 @import "@fontsource-variable/manrope";
+@import "@fontsource/playfair-display/400.css";
+@import "@fontsource/playfair-display/500.css";
+@import "@fontsource/playfair-display/400-italic.css";
+@import "@fontsource/cormorant-garamond/400-italic.css";
+@import "@fontsource/cormorant-garamond/500-italic.css";
+@import "@fontsource-variable/montserrat";
 
 
 /*
-  Gruham tokens. Colours come from the logo artwork: velvet maroon, antique bronze, peacock teal.
-  Shape rule: interactive controls are full pills, imagery is 6px, panels and inputs are 10px.
+  Gruham tokens.
+  Storefront: deep forest green, antique gold and cream. Playfair Display for headings,
+  Cormorant Garamond italic for accents, Montserrat for UI text (tracked uppercase labels).
+  Shape rule: controls and imagery are near-square (2px); only round icon buttons are circles.
+  Admin keeps its own cool light palette and the Marcellus / Manrope pair (scoped under .admin-root).
 */
 @theme {
-  --font-display: "Marcellus", "Iowan Old Style", Georgia, serif;
-  --font-sans: "Manrope Variable", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-accent: "Cormorant Garamond", Georgia, serif;
+  --font-sans: "Montserrat Variable", "Segoe UI", Arial, sans-serif;
+  --font-admin-display: "Marcellus", "Iowan Old Style", Georgia, serif;
+  --font-admin-sans: "Manrope Variable", "Segoe UI", system-ui, sans-serif;
 
   --color-velvet: #1c0b10;
   --color-velvet-2: #26111a;
@@ -29,22 +41,28 @@
   --color-danger: #e0816f;
   --color-ok: #8cc9a4;
 
-  /* Storefront (light). Hero keeps the velvet tokens above. */
-  --color-page: #ffffff;
-  --color-paper: #f8f5f1;
-  --color-paper-2: #f0eae3;
-  --color-fg: #241619;
-  --color-fg-2: #5b4b4e;
-  --color-fg-3: #85767a;
-  --color-hair: #ebe4dd;
-  --color-hair-2: #d9cec5;
-  --color-brand: #6e1630;
-  --color-brand-hover: #561025;
-  --color-brand-deep: #3f0b1b;
-  --color-gold: #c9962e;
-  --color-gold-ink: #8a5f12;
-  --color-success: #1d7a4c;
-  --color-error: #b3261e;
+  /* Storefront (dark): forest green surfaces, cream text, antique gold accents. */
+  --color-void: #040906;
+  --color-page: #0f1d15;
+  --color-paper: #14251b;
+  --color-paper-2: #1d3527;
+  --color-fg: #efe4c8;
+  --color-fg-2: #cfc4a9;
+  --color-fg-3: #a59d84;
+  --color-hair: rgb(201 163 95 / 0.18);
+  --color-hair-2: rgb(201 163 95 / 0.38);
+  --color-brand: #c9a35f;
+  --color-brand-hover: #eccf8b;
+  --color-brand-deep: #0d1c13;
+  --color-on-brand: #241a0c;
+  --color-gold: #c9a35f;
+  --color-gold-light: #eccf8b;
+  --color-gold-deep: #8a6420;
+  --color-gold-ink: #eccf8b;
+  --color-cream: #efe4c8;
+  --color-burgundy: #4d1a24;
+  --color-success: #9fd4ad;
+  --color-error: #ef9a8f;
 
   /* Admin (light, cool) */
   --color-desk: #f3f4f3;
@@ -57,7 +75,7 @@
   --ease-silk: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 
-  --radius-img: 6px;
+  --radius-img: 2px;
   --radius-panel: 10px;
 }
 
@@ -73,7 +91,7 @@
 }
 @media (min-width: 768px) {
   :root {
-    --main-nav-height: 4.75rem;
+    --main-nav-height: 5.25rem;
   }
 }
 
@@ -86,16 +104,99 @@ body {
   background: var(--color-page);
   color: var(--color-fg);
   font-family: var(--font-sans);
-  font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
 }
 
-.font-display {
-  font-family: var(--font-display);
+/* In the base layer so tracking-* utilities can still widen it (e.g. the GRUHAM wordmark). */
+@layer base {
+  .font-display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: 0.01em;
+  }
+}
+
+/* Admin keeps its own type pair; the storefront fonts above are scoped out of it. */
+.admin-root {
+  --font-display: var(--font-admin-display);
+  --font-sans: var(--font-admin-sans);
+  font-family: var(--font-admin-sans);
+  font-feature-settings: "ss01", "cv11";
+}
+@layer base {
+  .admin-root .font-display {
+    letter-spacing: 0.005em;
+  }
+}
+
+/* Italic serif accent, as in "Draped with care." */
+@utility font-accent {
+  font-family: var(--font-accent);
+  font-style: italic;
   font-weight: 400;
-  letter-spacing: 0.005em;
+}
+
+/* Small tracked uppercase label in gold, used above headings and on buttons. */
+@utility eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--color-gold);
+}
+
+/* Gold gradient fill used by primary buttons. */
+@utility gold-fill {
+  background-image: linear-gradient(100deg, #d5b06a 0%, #c9a35f 55%, #bd9351 100%);
+}
+
+@layer components {
+/* Gold hairline, diamond, gold hairline. */
+.diamond-rule {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: var(--color-gold);
+}
+.diamond-rule::before,
+.diamond-rule::after {
+  content: "";
+  height: 1px;
+  width: 4.5rem;
+  background: linear-gradient(90deg, transparent, currentColor);
+}
+.diamond-rule::after {
+  background: linear-gradient(90deg, currentColor, transparent);
+}
+.diamond-rule > i {
+  width: 6px;
+  height: 6px;
+  transform: rotate(45deg);
+  background: currentColor;
+}
+
+/* Section backdrops: deep green with a warm, low glow, standing in for the photographed walls. */
+.surface-glow {
+  background:
+    radial-gradient(120% 80% at 15% 0%, rgb(201 163 95 / 0.09), transparent 55%),
+    radial-gradient(90% 70% at 100% 100%, rgb(77 26 36 / 0.22), transparent 60%),
+    var(--color-page);
+}
+.surface-deep {
+  background:
+    radial-gradient(100% 70% at 50% 0%, rgb(29 53 39 / 0.9), transparent 70%),
+    var(--color-brand-deep);
+}
+
+}
+
+/* Arched top for category cards. */
+@utility arch {
+  border-radius: 999px 999px 2px 2px;
 }
 
 .tabular {
@@ -104,13 +205,13 @@ body {
 
 ::selection {
   background: var(--color-brand);
-  color: #fff;
+  color: var(--color-on-brand);
 }
 
 :focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 3px;
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
 .admin-root :focus-visible {
@@ -135,13 +236,21 @@ body {
   display: none;
 }
 
-/* Zari rule: a thin bronze line with a woven dash pattern, used under section headings. */
+/* Zari rule: a gold hairline with a small diamond at its centre. */
 .zari-rule {
+  position: relative;
+  height: 7px;
+  background: linear-gradient(90deg, transparent, var(--color-gold) 20% 80%, transparent) center / 100% 1px no-repeat;
+}
+.zari-rule::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
   height: 6px;
-  background:
-    linear-gradient(var(--color-gold), var(--color-gold)) top / 100% 1px no-repeat,
-    repeating-linear-gradient(90deg, var(--color-gold) 0 6px, transparent 6px 12px) bottom / 100% 2px no-repeat;
-  opacity: 0.8;
+  background: var(--color-gold);
+  transform: translate(-50%, -50%) rotate(45deg);
 }
 
 input[type="range"],

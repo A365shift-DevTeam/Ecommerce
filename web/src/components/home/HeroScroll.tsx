@@ -58,21 +58,28 @@ function release(frames: (Frame | null)[]) {
   for (const f of frames) if (f && !(f instanceof HTMLImageElement)) f.close();
 }
 
+/** A request that stalls longer than this is abandoned, so it cannot hold a download worker forever. */
+const FETCH_TIMEOUT_MS = 12000;
+
 /** Download and decode one frame off the main thread; falls back to <img> where createImageBitmap is missing. */
 async function loadFrame(url: string): Promise<Frame | null> {
   if (typeof createImageBitmap === "function") {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: ctrl.signal });
       if (res.ok) return await createImageBitmap(await res.blob());
     } catch {
       // fall through to <img>
+    } finally {
+      clearTimeout(timer);
     }
   }
   const im = new Image();
   im.decoding = "async";
   im.src = url;
   try {
-    await im.decode();
+    await Promise.race([im.decode(), new Promise((_, reject) => setTimeout(reject, FETCH_TIMEOUT_MS))]);
   } catch {
     return im.naturalWidth ? im : null;
   }
@@ -108,7 +115,8 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
   const geomRef = useRef({ start: 0, travel: 1 });
   const posRef = useRef({ current: 0, drawn: -1, alpha: -1, dirty: true, t: 0 });
   const genRef = useRef(0);
-  const introLoadRef = useRef<Promise<unknown>>(Promise.resolve());
+  const wantRef = useRef(0); // frame the scroll position currently asks for; downloads jump to it
+  const readyRef = useRef(false);
   const [ready, setReady] = useState(false);
   const [loaded, setLoaded] = useState(0);
 
@@ -156,6 +164,9 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) return false;
     const intro = introAlpha > 0 ? introRef.current : null;
+    // Frames load alongside the brand card, not after it. While the card is still meant to be on screen but
+    // has not decoded yet, draw nothing: the placeholder <img> of the card stays visible instead of a frame.
+    if (introAlpha > 0 && !intro && !reduced) return false;
     let a: Frame | null = null;
     if (!intro || introAlpha < 1) {
       const i = Math.round(pos);
@@ -165,7 +176,7 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
     if (!a && !intro) return false;
     ctx.imageSmoothingQuality = "high";
     ctx.globalAlpha = 1;
-    ctx.fillStyle = "#1c0b10";
+    ctx.fillStyle = "#0f1d15";
     ctx.fillRect(0, 0, rect.cw, rect.ch);
     if (a) {
       const [fw, fh] = frameSize(a);
@@ -187,15 +198,31 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
   const drawRef = useRef(draw);
   drawRef.current = draw;
 
-  /** Load one decoded frame into the cache, unless a newer build has replaced this one. */
+  /** Load one decoded frame into the cache, unless a newer build has replaced this one. Returns false if it failed. */
   const renderFrame = async (i: number, gen: number) => {
     const f = await loadFrame(urlsRef.current[i]);
-    if (!f) return;
-    if (gen !== genRef.current) return release([f]);
+    if (!f) return false;
+    if (gen !== genRef.current) return release([f]), true;
     cacheRef.current[i] = f;
     posRef.current.dirty = true;
-    if (i === 0 || (reduced && i === urlsRef.current.length - 1)) setReady(true);
     setLoaded((n) => n + 1);
+    return true;
+  };
+
+  /**
+   * Next frame to download: the frame the scroll position wants (or its nearest missing neighbour) jumps
+   * the queue, so scrolling ahead of the download never leaves the visitor looking at a stale picture.
+   */
+  const nextFrame = (queue: number[]) => {
+    const want = wantRef.current;
+    const cache = cacheRef.current;
+    for (let d = 0; d <= 6; d++) {
+      for (const i of d ? [want + d, want - d] : [want]) {
+        const at = queue.indexOf(i);
+        if (at !== -1 && !cache[i]) return queue.splice(at, 1)[0];
+      }
+    }
+    return queue.shift()!;
   };
 
   /** (Re)build the frame cache: on first load and whenever larger frames are needed. */
@@ -206,9 +233,14 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
     cacheRef.current = new Array(n).fill(null);
     setLoaded(0);
     const queue = reduced ? [n - 1] : loadOrder(n);
+    const tries = new Array(n).fill(0);
+    // Frames start immediately, in parallel with the brand card (draw() keeps the card first on screen).
     Array.from({ length: 6 }, async () => {
-      await introLoadRef.current; // the brand card shows first, so no showroom frame flashes before it
-      while (queue.length && gen === genRef.current) await renderFrame(queue.shift()!, gen);
+      while (queue.length && gen === genRef.current) {
+        const i = nextFrame(queue);
+        // A failed or timed-out frame goes to the back of the queue for up to two more attempts.
+        if (!(await renderFrame(i, gen)) && ++tries[i] < 3) queue.push(i);
+      }
     });
   };
 
@@ -220,14 +252,12 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
     for (let n = 1; n <= HERO_FRAME_COUNT; n += FRAME_STEP) list.push(n);
     if (list[list.length - 1] !== HERO_FRAME_COUNT) list.push(HERO_FRAME_COUNT);
     let alive = true;
-    introLoadRef.current = reduced
-      ? Promise.resolve()
-      : loadFrame(heroIntro(backingCap(mobile))).then((f) => {
-          if (!alive) return f && release([f]);
-          introRef.current = f;
-          posRef.current.dirty = true;
-          if (f) setReady(true);
-        });
+    if (!reduced)
+      void loadFrame(heroIntro(backingCap(mobile))).then((f) => {
+        if (!alive) return f && release([f]);
+        introRef.current = f;
+        posRef.current.dirty = true;
+      });
     let width = 0;
     // Frames are scaled on every draw, so a resize only reloads when it needs larger frames.
     const load = () => {
@@ -283,12 +313,15 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
         const fp = reduced ? 1 : Math.max(0, (p - INTRO_FADE) / (1 - INTRO_FADE));
         // Lenis already smooths the scroll, so the frame follows it directly: one whole frame per position.
         const shown = Math.round(fp * (n - 1));
+        wantRef.current = shown;
         const pos = posRef.current;
         if (pos.dirty || shown !== pos.drawn || alpha !== pos.alpha) {
           if (drawRef.current(shown, alpha)) {
             pos.drawn = shown;
             pos.alpha = alpha;
             pos.dirty = false;
+            // The canvas is shown only once it has really drawn something; until then the placeholder card stays.
+            if (!readyRef.current) (readyRef.current = true), setReady(true);
           }
         }
       }
@@ -350,11 +383,11 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
-        className={`pointer-events-none absolute bottom-3 right-3 grid size-11 place-items-center rounded-full bg-velvet/70 backdrop-blur-sm transition-opacity duration-500 ${pct >= 100 ? "opacity-0" : "opacity-100"}`}
+        className={`pointer-events-none absolute bottom-3 right-3 grid size-11 place-items-center rounded-full bg-page/70 backdrop-blur-sm transition-opacity duration-500 ${pct >= 100 ? "opacity-0" : "opacity-100"}`}
       >
         <svg viewBox="0 0 36 36" className="absolute inset-0 size-full -rotate-90" aria-hidden="true">
           <circle cx="18" cy="18" r="15" fill="none" stroke="rgb(239 230 218 / 0.15)" strokeWidth="2.5" />
-          <circle cx="18" cy="18" r="15" fill="none" stroke="var(--color-bronze)" strokeWidth="2.5" strokeLinecap="round" strokeDasharray={`${(pct / 100) * 94.25} 94.25`} />
+          <circle cx="18" cy="18" r="15" fill="none" stroke="var(--color-gold)" strokeWidth="2.5" strokeLinecap="round" strokeDasharray={`${(pct / 100) * 94.25} 94.25`} />
         </svg>
         <span className="text-[0.62rem] font-semibold tabular text-ivory">{pct}%</span>
       </div>
@@ -382,7 +415,7 @@ export function HeroScroll({ mobileContent }: { mobileContent?: ReactNode }) {
 
   return (
     <section ref={sectionRef} aria-label="Inside the Gruham studio" className={reduced ? "relative h-[100svh]" : "relative h-[420vh]"}>
-      <div ref={stickyRef} className="sticky top-0 h-[100svh] overflow-hidden bg-velvet">
+      <div ref={stickyRef} className="sticky top-0 h-[100svh] overflow-hidden bg-page">
         {/* Starts under the announcement bar: the header's main row is see-through while the frames play. */}
         <div ref={boxRef} className="absolute inset-x-0 bottom-0 top-[var(--announce-height)]">
           {frame}

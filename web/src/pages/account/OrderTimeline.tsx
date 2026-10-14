@@ -24,7 +24,7 @@ export function OrderTimeline({ order, light = false }: { order: Order; light?: 
     );
   }
   const reached = steps.indexOf(order.status);
-  const done = light ? "bg-peacock text-white" : "bg-brand text-white";
+  const done = light ? "bg-peacock text-white" : "bg-brand text-on-brand";
   const todo = light ? "border border-rule text-ink-3 bg-white" : "border border-hair-2 text-fg-3";
   const line = light ? "bg-peacock" : "bg-brand";
   const lineTodo = light ? "bg-rule" : "bg-hair-2";
